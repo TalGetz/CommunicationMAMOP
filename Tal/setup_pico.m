@@ -53,7 +53,6 @@ sigGenGroupObj = sigGenGroupObj(1);
 
 %% Arbitrary waveform generator - set parameters
 plaster_freq = 1;
-hz = 20;
 set(ps2000aDeviceObj.Signalgenerator(1), 'startFrequency', 1.0 / plaster_freq * hz);
 set(ps2000aDeviceObj.Signalgenerator(1), 'stopFrequency', 1.0 / plaster_freq * hz);
 set(ps2000aDeviceObj.Signalgenerator(1), 'offsetVoltage', 0.0);

@@ -1,3 +1,5 @@
+function ret_val = recieve_data_function(blockGroupObj, ps2000aDeviceObj, ps2000aEnuminfo)
+
 %% constants
 constants
 
@@ -135,9 +137,10 @@ prediction_correct_length = bits_pred(1: floor(length(bits_pred) / 8)*8);
 
 %% print data
 pred_no_zeros = nonzeros(prediction_correct_length) - 1;
+ret_val = pred_no_zeros;
 val = get_ascii_from_bits(pred_no_zeros.').';
 disp(char(val));
-
+end
 %% generate bits from ascii
 function bits = get_bits_from_ascii(ascii)
 bits = reshape( dec2bin(ascii, 8).', [], 1);
