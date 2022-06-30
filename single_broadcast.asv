@@ -68,20 +68,20 @@ Sample_Size = awgBufferSize;
 f = 174300; % HZ
 f = 110000; % HZ
 f_pico = hz; % HZ
-occurences_to_collect = 2;
+occurences = 1;
 
 %% generate data
-string = '123456781234567812345678123456'; % (string size + 1) needs to divide 32768
+string = 'a'; % (string size + 1) needs to divide 32768
 binary = get_bits_from_ascii(string) + 1;
-binary = [0 0 0 0 0 0 0 0 binary 0 0 0 0 0 0 0 0];
+binary = [0 0 0 0 0 0 0 0 binary];
 
 y = get_AM_Data_of_bits(binary, Sample_Size, f, f_pico, dV);
-% plot(y);
+plot(y);
 %% Arbitrary waveform generator - simple
 % Output an arbitrary waveform with constant frequency (defined above).
 
 % Arb. Waveform : y (defined above)
-[status.setSigGenArbitrarySimple] = invoke(sigGenGroupObj, 'setSigGenArbitrarySimple', y);
+% [status.setSigGenArbitrarySimple] = invoke(sigGenGroupObj, 'setSigGenArbitrarySimple', y);
 
 % Increment      : 0 (Hz)
 % Dwell Time     : 1 (s)
@@ -93,9 +93,7 @@ y = get_AM_Data_of_bits(binary, Sample_Size, f, f_pico, dV);
 % Trigger Type   : 0 (ps3000aEnuminfo.enPS3000ASigGenTrigType.PS3000A_SIGGEN_RISING)
 % Trigger Source : 4 (ps3000aEnuminfo.enPS3000ASigGenTrigSource.PS3000A_SIGGEN_SOFT_TRIG)
 % Ext. Threshold : 0
-%[status.setSigGenArbitrary] = invoke(sigGenGroupObj, 'setSigGenArbitrary', 0.000001, 1, y, 0, 0, 0, 2, 0, 0, 4, 0);
-
-%[status.sigGenSoftwareControl] = invoke(sigGenGroupObj, 'ps2000aSigGenSoftwareControl', 1);
+[status.setSigGenArbitrary] = invoke(sigGenGroupObj, 'setSigGenArbitrary', 0.000001, 1, y, 0, 0, 0, 2, 0, 0, 4, 0);
 
 %%
 % 
@@ -114,7 +112,7 @@ blockGroupObj = blockGroupObj(1);
 
 
 set(ps2000aDeviceObj, 'numPreTriggerSamples', 0);
-set(ps2000aDeviceObj, 'numPostTriggerSamples', 8192 * 120 / hz * occurences_to_collect); % 2 occurences of the sequence
+set(ps2000aDeviceObj, 'numPostTriggerSamples', 8192 * 120 / hz * occurences); % 2 occurences of the sequence
 
 %% max detected voltage range
 %turn Channel A on with 10v range
@@ -170,7 +168,7 @@ delete(ps2000aDeviceObj);
 
 %% INFO:
 T_bit = 1 / hz / length(binary) * 1.0085;
-% plot(chA);
+plot(chA);
 
 %% Decode Bit Array from Amplitude Array
 time = timeMs;
@@ -180,83 +178,65 @@ amplitude_array = chA / 1000;
 V_max = max(amplitude_array);
 H_at_transmittance = V_max;
 amp_normalized = abs(amplitude_array) / H_at_transmittance * (M-1);
-% plot(time, amp_normalized);
+amp_normalized_mean = movmean(amp_normalized, T_bit * 10e6 / 100000)*sqrt(2);
+plot(time, amp_normalized);
 first_level = 1;
 below_first_level_threshold = 1/M/2;
-%% first zero
-amp_normalized_mean = movmean(amp_normalized, 100)*sqrt(2);
-bool_arr = (amp_normalized_mean < below_first_level_threshold);
-sum_bool = movsum(bool_arr, 100);
-%plot(time, sum_bool);
-first_ind = find(sum_bool >= max(sum_bool) / M * (M-1), 1, 'first');
-% xline(time(first_ind), 'b');
-amp_normalized = amp_normalized(first_ind:end);
-time = time(first_ind:end);
-%% first non-zero
-amp_normalized_mean = movmean(amp_normalized, 100)*sqrt(2);
-
 bool_arr = (amp_normalized_mean > below_first_level_threshold);
-sum_bool = movsum(bool_arr, 100);
-%plot(time, amp_normalized);
-second_ind = find(sum_bool >= max(sum_bool) / 2, 1, 'first');
-% xline(time(second_ind), 'g');
-amp_normalized = amp_normalized(second_ind:end);
-time = time(second_ind:end);
-
-%% second zero
-amp_normalized_mean = movmean(amp_normalized, 100)*sqrt(2);
-bool_arr = (amp_normalized_mean < below_first_level_threshold);
-sum_bool = movsum(bool_arr, 100);
-%plot(time, amp_normalized);
-third_ind = find(sum_bool >= max(sum_bool) / M * (M-1), 1, 'first');
-% xline(time(third_ind), 'r');
-%% reset arrays
-time = time(1:third_ind);
+sum_bool = movsum(amp_normalized_mean, 100);
+%plot(time, sum_bool);
+first_ind = find(sum_bool >= max(sum_bool) / 2, 1, 'first');
+xline(time(first_ind), 'g');
+% setting up time
+time = time(first_ind:end);
+time = time - time(first_ind);
 time = time - min(time);
-amp_normalized = amp_normalized(1:third_ind);
+amp_normalized = amp_normalized(first_ind:end);
 amp_normalized = amp_normalized / max(amp_normalized) * (M-1) * sqrt(2);
-amplitude_array = amplitude_array(1:third_ind);
+amplitude_array = amplitude_array(first_ind:end);
+
 %% plotting
-% plot(time, amp_normalized);
-% title("Recieved Data Normalized [At SymbolRate=200symbols/sec]");
-% xlabel("time [s]");
-% ylabel("Normalized Amplitude");
+plot(time, amp_normalized);
+title("Recieved Data Normalized [At SymbolRate=200symbols/sec]");
+xlabel("time [s]");
+ylabel("Normalized Amplitude");
 bits_pred = [];
 for i = 0:round(max(time) / T_bit)
     time_mask = (time > i*T_bit) & (time < (i+1)*T_bit);
     bits_pred(end+1) = nearest(prctile(amp_normalized(logical(time_mask)), 50));
 end
 for i = 0:length(binary)*2
-    % xline(i/hz/length(binary) * 1.0085); % 1.0085 is a magic number for phase gained over time (approx.)
+    xline(i/hz/length(binary) * 1.0085); % 1.0085 is a magic number for phase gained over time (approx.)
 end
 %bar(bits_pred);
-%title("Symbol Predictions [At SymbolRate=200symbols/sec]");
-%xlabel("Symbol Index");
-%ylabel("Symbol Value");
+title("Symbol Predictions [At SymbolRate=200symbols/sec]");
+xlabel("Symbol Index");
+ylabel("Symbol Value");
+bits_pred_fixed = [0 0 0 0 0 0 0 0 bits_pred];
 
+prediction_correct_length = bits_pred_fixed(1: floor(length(bits_pred_fixed) / 8)*8);
+bit_errors = sum(binary ~= prediction_correct_length);
+ber = bit_errors / length(bits_pred_fixed);
 %%
-prediction_correct_length = bits_pred(1: floor(length(bits_pred) / 8)*8);
-bit_errors = sum(nonzeros(binary).' ~= prediction_correct_length);
-ber = bit_errors / length(bits_pred);
-%%
-pred_no_zeros = nonzeros(prediction_correct_length) - 1;
-val = get_ascii_from_bits(pred_no_zeros.').';
+
+disp(prediction_correct_length);
+val = get_ascii_from_bits(prediction_correct_length).';
 disp(char(val));
 %% Channel A
-%axisHandleChA = subplot(3,1,1); 
-%hold on
-% % plot(axisHandleChA, timeMs, chA, 'b');
-% plot(time, amplitude_array, 'b');
+axisHandleChA = subplot(3,1,1); 
+hold on
+% plot(axisHandleChA, timeMs, chA, 'b');
+plot(time, amplitude_array, 'b');
 % scatter(axisHandleChA, timeMs(save_indexes(1, :) * slice_size), zeros(1, length(save_indexes(1, :))), 'g*');%hold off
 
-% ylim(axisHandleChA, [-10 10]); % Adjust vertical axis for signal.
-% title(axisHandleChA, 'Channel A');
-% xlabel(axisHandleChA, 'Time (s)');
-% ylabel(axisHandleChA, 'Voltage (mV)');
-% for i = 0:length(binary)*2
-%    xline(i/hz/length(binary) * 1.0085); % 1.0085 is a magic number for phase gained over time (approx.)
-%end
-%grid(axisHandleChA);
+ylim(axisHandleChA, [-10 10]); % Adjust vertical axis for signal.
+title(axisHandleChA, 'Channel A');
+xlabel(axisHandleChA, 'Time (s)');
+ylabel(axisHandleChA, 'Voltage (mV)');
+for i = 0:length(binary)*2
+    xline(i/hz/length(binary) * 1.0085); % 1.0085 is a magic number for phase gained over time (approx.)
+end
+grid(axisHandleChA);
 
 
 %% Channel B
